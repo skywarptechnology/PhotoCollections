@@ -1,0 +1,4 @@
+<resources>
+    <dimen name="fab_margin">16dp</dimen>
+    <dimen name="ph_detail_common_gap">10dp</dimen>
+</resources>
