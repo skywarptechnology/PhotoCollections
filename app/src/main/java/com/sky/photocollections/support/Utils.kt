@@ -2,7 +2,12 @@ package com.sky.photocollections.support
 
 import android.app.Activity
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Point
+import android.net.Uri
 import android.util.Log
+import androidx.core.graphics.scale
 import com.sky.photocollections.retro.PicturesApi
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -11,6 +16,12 @@ import retrofit2.Callback
 import retrofit2.Response
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
+import java.io.*
+import java.net.HttpURLConnection
+import java.net.URL
+import java.text.DateFormat
+import java.util.*
+import kotlin.concurrent.thread
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlin.coroutines.suspendCoroutine
@@ -19,9 +30,19 @@ import kotlin.coroutines.suspendCoroutine
  * Created by skyalligator on 1/22/19.
  * 12:15 PM
  */
-
+//val packageName = "com.sky.photocollections"
 val TAG = "Pictures App"
 var BASE_URL = "http://www.json-generator.com/api/json/get/"
+var photoDir: String = ""
+val CAPTURE_NAME = "Capture_"
+val SMALL_IMG_PATH: String get() = "$photoDir/Small_Imgs"
+val LARGE_IMG_PATH: String get() = "$photoDir/Large_Imgs"
+
+
+fun generateName() = "$CAPTURE_NAME${getTimeStamp()}"
+fun getTimeStamp() = DateFormat.getDateTimeInstance().format(Date())
+fun getSmallImgPath(name: String) = "$SMALL_IMG_PATH/$name"
+fun getLargeImgPath(name: String) = "$LARGE_IMG_PATH/$name"
 
 /**
  * general log for application
@@ -55,19 +76,10 @@ val picturesApi: PicturesApi by lazy {
     retrofitIns.create(PicturesApi::class.java)
 }
 
-
-fun Activity.shareAddressViaOtherApps(subject: String, message: String) {
-    val sharingIntent = Intent(Intent.ACTION_SEND)
-    sharingIntent.type = "text/plain"
-    sharingIntent.putExtra(Intent.EXTRA_SUBJECT, subject)
-    sharingIntent.putExtra(Intent.EXTRA_TEXT, message)
-    startActivity(Intent.createChooser(sharingIntent, "Share Address"))
-}
-
 /**
  * co-routine implementation for retrofir future object
  */
-suspend fun <T> Call<T>.callApi(): T? {
+suspend fun <T> Call<T>.call(): T {
     return suspendCoroutine { continuation ->
 
         enqueue(object : Callback<T> {
@@ -111,4 +123,46 @@ inline fun CoroutineScope.launchWithoutEx(crossinline fnc: suspend () -> Unit) {
             e.printStackTrace()
         }
     }
+}
+
+suspend fun downloadImageBackground(imgUrl: String): Bitmap {
+    return suspendCoroutine { con ->
+        thread {
+            try {
+                val connection = URL(imgUrl).openConnection() as HttpURLConnection
+                connection.doInput = true
+                connection.connect()
+                con.resume(BitmapFactory.decodeStream(connection.inputStream))
+            } catch (e: Exception) {
+                con.resumeWithException(e)
+            }
+        }
+    }
+}
+
+fun getSmallSize(width: Int, height: Int): Point {
+    val w = 500
+    val ratio = w.toDouble() / width
+    val h = height * ratio
+    return Point(w, h.toInt())
+}
+
+fun resizeAndWriteImage(bitmap: Bitmap, name: String) {
+    val smallSize = getSmallSize(bitmap.width, bitmap.height)
+    val smallBitmap = bitmap.scale(smallSize.x, smallSize.y)
+
+    writeBitmapToFile(bitmap, LARGE_IMG_PATH, name)
+    writeBitmapToFile(smallBitmap, SMALL_IMG_PATH, name)
+}
+
+@Throws(FileNotFoundException::class)
+fun writeBitmapToFile(bitmap: Bitmap, folderPath: String, fileName: String): Uri {
+    val outputDir = File(folderPath)
+    if (!outputDir.exists()) outputDir.mkdirs()
+    val outputFile = File(outputDir, fileName)
+
+    FileOutputStream(outputFile).use {
+        bitmap.compress(Bitmap.CompressFormat.PNG, 0, it)
+    }
+    return Uri.fromFile(outputFile)
 }

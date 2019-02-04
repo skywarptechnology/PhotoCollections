@@ -11,6 +11,6 @@ import retrofit2.http.GET
 interface PicturesApi {
 
     @GET("cftPFNNHsi")
-    fun getPictures(): Call<List<PictureData>>
+    fun getPictures(): Call<ArrayList<PictureData>>
 
 }
